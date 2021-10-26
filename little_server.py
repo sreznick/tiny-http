@@ -4,7 +4,7 @@ import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import logging
-
+from collections import Counter
 
 class Config:
 
@@ -13,6 +13,9 @@ class Config:
     VERSION = '1.0'
     CMD_ARGS = ['?']
 
+def gcd(a, b):
+    q = a % b
+    return b if q == 0 else gcd(b, q)
 
 class FormData:
 
@@ -211,10 +214,14 @@ class S(BaseHTTPRequestHandler):
             self.do_echo()
         elif self.path.startswith('/forward'):
             self.do_forward()
+        elif self.path.startswith('/textstat'):
+            self.do_textstat()
         elif self.path.startswith('/text'):
             self.do_text()
         elif self.path.startswith('/fontanka'):
             self.do_fontanka()
+        elif self.path.startswith('/gcd'):
+            self.do_gcd()
         elif self.path.startswith('/app/blog'):
             pass 
         else:
@@ -257,6 +264,33 @@ class S(BaseHTTPRequestHandler):
         self.send_response(301)
         self.send_header('Location', f'https://fontanka.ru/{yyyy:04d}/{mm:02d}/{dd:02d}/all.html')
         self.end_headers()
+
+    def do_gcd(self):
+        fields = FormData(self.get_body())
+        a = fields.single("a")
+        b = fields.single("b")
+
+        if a is None or b is None:
+            self._set_headers()
+            self.wfile.write(self._html("error", Templates.form_error('No values. Sorry')))
+            return
+
+        a, b = map(int, (a, b))
+        self._set_headers()
+        self.wfile.write(self._html("gcd", Templates.gcd(a, b, gcd(a, b))))
+
+    def do_textstat(self):
+        fields = FormData(self.get_body())
+        text = fields.single("text")
+
+        if text is None:
+            self._set_headers()
+            self.wfile.write(self._html("error", Templates.form_error('No text. Sorry')))
+            return
+
+        self._set_headers()
+        stat = Counter(c for c in text.lower() if c in 'abcdefghijklmnopqrstuvwxyz')
+        self.wfile.write(self._html("textstat", Templates.textstat(stat)))
 
     def do_text(self):
         field_data = self.get_body()
@@ -310,6 +344,16 @@ class Templates:
     @staticmethod
     def form_error(description):
         return f'<p>{description}</p>' 
+
+    @staticmethod
+    def gcd(a, b, g):
+        return f'<p style="font-size: 3em;">GCF({a}, {b}) is <em>{g}</em></p>'
+
+    @staticmethod
+    def textstat(stat):
+        return f'<table style="font-size: 3em;" width="100%">' + \
+               ''.join(f'<tr><td width="50%" style="background: #33DD33;">{k}</td><td width="50%" style="background: lightblue;">{v}</td></tr>' for k, v in stat.most_common()) + \
+               '</table>'
 
     @staticmethod
     def echo(request):
