@@ -213,6 +213,8 @@ class S(BaseHTTPRequestHandler):
             self.do_forward()
         elif self.path.startswith('/text'):
             self.do_text()
+        elif self.path.startswith('/fontanka'):
+            self.do_fontanka()
         elif self.path.startswith('/app/blog'):
             pass 
         else:
@@ -240,6 +242,20 @@ class S(BaseHTTPRequestHandler):
 
         self.send_response(301)
         self.send_header('Location', where)
+        self.end_headers()
+
+    def do_fontanka(self):
+        fields = FormData(self.get_body())
+        when = fields.single("date")
+
+        if when is None:
+            self._set_headers()
+            self.wfile.write(self._html("error", Templates.form_error('No date. Sorry')))
+            return
+
+        yyyy, mm, dd = map(int, when.split('-'))
+        self.send_response(301)
+        self.send_header('Location', f'https://fontanka.ru/{yyyy:04d}/{mm:02d}/{dd:02d}/all.html')
         self.end_headers()
 
     def do_text(self):
