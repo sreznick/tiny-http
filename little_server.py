@@ -7,16 +7,37 @@ import logging
 
 
 class Config:
+
     DEFAULT_ROOT = '.'
     STATIC_ROOT = DEFAULT_ROOT
     VERSION = '1.0'
     CMD_ARGS = ['?']
 
 
+class FormData:
+
+    def __init__(self, body):
+        self._data = parse_qs(body.decode())
+
+    def single(self, key):
+        if key in self._data:
+            value = self._data[key][0].strip() 
+            return value if value else None
+        else:
+            return None
+
+    def __str__(self):
+        return str(self._data) 
+
+
 class S(BaseHTTPRequestHandler):
     def _set_headers(self, status=200):
         self.send_response(status)
         self.send_header("Content-type", "text/html")
+        self.end_headers()
+
+    def _error(self, status):
+        self.send_response(status)
         self.end_headers()
 
     def _html(self, clazz, message):
@@ -193,7 +214,7 @@ class S(BaseHTTPRequestHandler):
         elif self.path.startswith('/text'):
             self.do_text()
         elif self.path.startswith('/app/blog'):
-            
+            pass 
         else:
             self.wfile.write(self._html("qqq", "POST!"))
 
@@ -203,39 +224,26 @@ class S(BaseHTTPRequestHandler):
 
     def do_echo(self):
         self._set_headers()
-
-        """
-        for h in self.headers:
-            resp += f'<tr><td>{h}</td><td>{self.headers[h]} </td></tr>'
-
-        resp += f'''
-        </table>
-        '''
-
-        length = int(self.headers['content-length'])
-        data = self.rfile.read(length).decode()
-        resp += f''' <p>Data: {data}</p>
-        </html>
-        '''
-        """
         self.wfile.write(self._html("echo_body", Templates.echo(self)))
 
     def do_forward(self):
-        length = int(self.headers['content-length'])
-        field_data = self.rfile.read(length)
-        print(field_data)
-        fields = parse_qs(field_data.decode())
-        print(fields)
+        fields = FormData(self.get_body())
+        where = fields.single("url")
+
+        if where is None:
+            self._set_headers()
+            self.wfile.write(self._html("error", Templates.form_error('No URL. Sorry')))
+            return
+
+        if not where.startswith('https://') and not where.startswith('http://'):
+            where = 'https://' + where
+
         self.send_response(301)
-        self.send_header('Location', f'https://{fields["url"][0]}')
+        self.send_header('Location', where)
         self.end_headers()
-        #print(self.rfile.read())
-        #pairs = url.query.split('&')
-        #print(pairs)
 
     def do_text(self):
-        length = int(self.headers['content-length'])
-        field_data = self.rfile.read(length).decode()
+        field_data = self.get_body()
         fields = parse_qs(field_data)
         print(fields)
         redirect = fields.get('redirect', [''])[0].strip()
@@ -255,6 +263,10 @@ class S(BaseHTTPRequestHandler):
             self.wfile.write(self._html("text_body", f'<h2 style="bqackground: light-blue;">Thank you for comment</h2> {tail}'))
         else:
             self.wfile.write(self._html("text_body", f'<h2>No comment :(</h2> {tail}'))
+
+    def get_body(self):
+        length = int(self.headers['content-length'])
+        return self.rfile.read(length)
 
 
 def run(server_class=HTTPServer, handler_class=S, addr="localhost", port=8000, static_root='.'):
@@ -279,6 +291,9 @@ class Templates:
             <p>Error on server size: {e} (local name: {os.path.join(Config.STATIC_ROOT, name[1:])})</p>
         '''
 
+    @staticmethod
+    def form_error(description):
+        return f'<p>{description}</p>' 
 
     @staticmethod
     def echo(request):
